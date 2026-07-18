@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>NAOMI · 全息虚拟女友</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <style>
+    :root {
+      --bg: #05070a;
+      --panel: rgba(12, 16, 28, 0.72);
+      --panel-border: rgba(255, 110, 180, 0.22);
+      --accent: #ff6eb4;
+      --accent-2: #7a5cff;
+      --cyan: #00f0ff;
+      --text: #f2f5ff;
+      --text-dim: rgba(242, 245, 255, 0.62);
+      --glass: rgba(255, 255, 255, 0.04);
+      --radius: 22px;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 40px rgba(255, 110, 180, 0.08);
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Noto Sans SC', sans-serif;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #canvas-container {
+      position: fixed; inset: 0;
+      z-index: 1;
+    }
+
+    .ui-layer {
+      position: fixed; inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      grid-template-rows: 1fr auto;
+      padding: 24px;
+      gap: 20px;
+    }
+
+    .brand {
+      position: fixed; top: 24px; left: 28px;
+      pointer-events: auto;
+      display: flex; align-items: center; gap: 14px;
+      animation: fade-in 1s var(--ease) 0.2s both;
+    }
+    .brand-mark {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(255,110,180,0.18), rgba(122,92,255,0.14));
+      border: 1px solid var(--panel-border);
+      display: grid; place-items: center;
+      box-shadow: 0 0 24px rgba(255,110,180,0.18);
+    }
+    .brand-mark svg { width: 24px; height: 24px; fill: var(--accent); }
+    .brand-text h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.35rem; letter-spacing: 0.14em;
+      color: var(--text);
+      text-shadow: 0 0 16px rgba(255,110,180,0.4);
+    }
+    .brand-text p {
+      font-size: 0.62rem; letter-spacing: 0.22em;
+      color: var(--text-dim); text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .chat-panel {
+      grid-column: 2 / 3;
+      grid-row: 1 / 3;
+      pointer-events: auto;
+      background: var(--panel);
+      backdrop-filter: blur(24px) saturate(150%);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      animation: slide-in-right 0.9s var(--ease) 0.3s both;
+      max-height: calc(100vh - 48px);
+    }
+
+    .chat-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--glass);
+      display: flex; align-items: center; justify-content: space-between;
+      background: linear-gradient(90deg, rgba(255,110,180,0.08), transparent);
+    }
+    .chat-header .title {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .avatar-ring {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      border: 1px solid var(--accent);
+      box-shadow: 0 0 14px rgba(255,110,180,0.35);
+      display: grid; place-items: center;
+      position: relative;
+    }
+    .avatar-ring::after {
+      content: ''; position: absolute; inset: -3px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,110,180,0.25);
+      animation: pulse-ring 2.5s ease-out infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.35); opacity: 0; }
+    }
+    .avatar-ring svg { width: 20px; height: 20px; fill: var(--accent); }
+    .chat-header h2 { font-size: 1rem; font-weight: 500; }
+    .chat-header .status {
+      font-size: 0.6rem; letter-spacing: 0.12em;
+      color: var(--cyan); text-transform: uppercase;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px;
+      display: flex; flex-direction: column; gap: 14px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: rgba(255,110,180,0.25); border-radius: 2px; }
+
+    .msg {
+      max-width: 88%;
+      padding: 12px 14px;
+      border-radius: 16px;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      animation: pop-in 0.35s var(--ease) both;
+      white-space: pre-wrap;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, rgba(122,92,255,0.35), rgba(122,92,255,0.15));
+      border: 1px solid rgba(122,92,255,0.28);
+      border-bottom-right-radius: 4px;
+    }
+    .msg.ai {
+      align-self: flex-start;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--panel-border);
+      border-bottom-left-radius: 4px;
+    }
+    .msg.ai.streaming::after {
+      content: '▌'; color: var(--accent); animation: cursor 0.8s steps(1) infinite;
+    }
+    @keyframes cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes pop-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    .chat-input-area {
+      padding: 14px;
+      border-top: 1px solid var(--glass);
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .input-row {
+      display: flex; gap: 10px; align-items: flex-end;
+    }
+    .chat-input {
+      flex: 1;
+      min-height: 44px; max-height: 120px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      font-family: inherit; font-size: 0.88rem;
+      outline: none; resize: none;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .chat-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 18px rgba(255,110,180,0.12);
+    }
+    .icon-btn {
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.25);
+      color: var(--text-dim);
+      cursor: pointer;
+      display: grid; place-items: center;
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+    .icon-btn:hover { color: var(--accent); border-color: var(--accent); background: rgba(255,110,180,0.08); }
+    .icon-btn.active { color: var(--accent); background: rgba(255,110,180,0.12); border-color: var(--accent); box-shadow: 0 0 16px rgba(255,110,180,0.18); }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .send-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border: none; color: #fff;
+    }
+    .send-btn:hover { filter: brightness(1.12); box-shadow: 0 0 24px rgba(255,110,180,0.35); }
+
+    .voice-hint {
+      font-size: 0.65rem; color: var(--text-dim); text-align: center;
+      opacity: 0; transition: opacity 0.3s; height: 16px;
+    }
+    .voice-hint.visible { opacity: 1; }
+
+    .settings-btn {
+      position: fixed; top: 24px; right: 28px;
+      pointer-events: auto;
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      color: var(--text-dim);
+      cursor: pointer;
+      display: grid; place-items: center;
+      transition: all 0.3s ease;
+      z-index: 20;
+    }
+    .settings-btn:hover { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 20px rgba(255,110,180,0.2); }
+    .settings-btn svg { width: 22px; height: 22px; }
+
+    .settings-panel {
+      position: fixed; top: 80px; right: 28px;
+      width: 360px; max-height: calc(100vh - 110px);
+      pointer-events: auto;
+      background: rgba(8, 11, 20, 0.92);
+      backdrop-filter: blur(28px) saturate(160%);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      z-index: 30;
+      transform: translateX(120%);
+      opacity: 0;
+      transition: transform 0.45s var(--ease), opacity 0.35s ease;
+      overflow-y: auto;
+    }
+    .settings-panel.open { transform: translateX(0); opacity: 1; }
+
+    .settings-panel h3 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.95rem; letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 18px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 0.72rem;
+      color: var(--text-dim); letter-spacing: 0.08em;
+      margin-bottom: 6px; text-transform: uppercase;
+    }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.35);
+      color: var(--text);
+      font-family: inherit; font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.25s;
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--accent); }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--glass);
+    }
+    .toggle-row span { font-size: 0.8rem; color: var(--text-dim); }
+    .switch {
+      width: 44px; height: 24px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.1);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.25s;
+    }
+    .switch.on { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+    .switch::after {
+      content: ''; position: absolute;
+      top: 2px; left: 2px;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      transition: transform 0.25s var(--ease);
+    }
+    .switch.on::after { transform: translateX(20px); }
+
+    .save-btn {
+      width: 100%; margin-top: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff; font-weight: 500;
+      cursor: pointer;
+      transition: filter 0.2s, box-shadow 0.2s;
+    }
+    .save-btn:hover { filter: brightness(1.1); box-shadow: 0 0 24px rgba(255,110,180,0.3); }
+
+    .hint {
+      position: fixed; bottom: 26px; left: 28px;
+      pointer-events: none;
+      font-size: 0.7rem; color: var(--text-dim);
+      max-width: 420px;
+      line-height: 1.6;
+      animation: fade-in 1s var(--ease) 0.8s both;
+    }
+    .hint kbd {
+      background: rgba(255,255,255,0.08);
+      padding: 2px 6px; border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.1);
+      font-family: inherit;
+    }
+
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(2px);
+      z-index: 25;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slide-in-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+
+    @media (max-width: 900px) {
+      .ui-layer { grid-template-columns: 1fr; grid-template-rows: 1fr; padding: 14px; }
+      .chat-panel {
+        grid-column: 1; grid-row: 1;
+        width: 100%; max-width: 100%;
+        max-height: 42vh;
+        position: fixed; bottom: 14px; left: 14px; right: 14px;
+        width: calc(100% - 28px);
+      }
+      .settings-panel { right: 14px; left: 14px; width: auto; top: 76px; }
+      .hint { display: none; }
+      .brand { top: 16px; left: 16px; }
+      .settings-btn { top: 16px; right: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    </div>
+    <div class="brand-text">
+      <h1>NAOMI</h1>
+      <p>Holographic Companion</p>
+    </div>
+  </div>
+
+  <button class="settings-btn" id="settings-btn" aria-label="设置">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82V9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+
+  <div class="overlay" id="overlay"></div>
+
+  <div class="settings-panel" id="settings-panel">
+    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.5 8.5"/><path d="M12 12V2"/></svg> AI 连接设置</h3>
+    <div class="form-group">
+      <label>API Endpoint</label>
+      <input id="api-endpoint" type="text" placeholder="https://api.openai.com/v1/chat/completions" />
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input id="api-key" type="password" placeholder="sk-..." />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>模型</label>
+        <input id="api-model" type="text" placeholder="gpt-4o-mini" />
+      </div>
+      <div class="form-group">
+        <label>温度</label>
+        <input id="api-temp" type="number" min="0" max="2" step="0.1" value="0.8" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>角色名称</label>
+      <input id="gf-name" type="text" placeholder="Naomi" />
+    </div>
+    <div class="form-group">
+      <label>系统设定（System Prompt）</label>
+      <textarea id="system-prompt" placeholder="描述她的性格、说话方式、与你的关系..."></textarea>
+    </div>
+    <div class="toggle-row">
+      <span>语音朗读回复</span>
+      <div class="switch on" id="tts-switch"></div>
+    </div>
+    <div class="toggle-row">
+      <span>语音输入</span>
+      <div class="switch" id="stt-switch"></div>
+    </div>
+    <div class="toggle-row">
+      <span>流式输出</span>
+      <div class="switch on" id="stream-switch"></div>
+    </div>
+    <button class="save-btn" id="save-settings">保存设置</button>
+  </div>
+
+  <div class="ui-layer">
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="title">
+          <div class="avatar-ring">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          </div>
+          <div>
+            <h2 id="gf-name-display">Naomi</h2>
+            <div class="status"><span class="status-dot"></span> 在线</div>
+          </div>
+        </div>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="chat-input-area">
+        <div class="voice-hint" id="voice-hint">正在聆听，请说话…</div>
+        <div class="input-row">
+          <textarea class="chat-input" id="chat-input" rows="1" placeholder="想和她说点什么？"></textarea>
+          <button class="icon-btn" id="mic-btn" aria-label="语音输入">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="icon-btn send-btn" id="send-btn" aria-label="发送">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">
+    <strong>操作提示</strong><br/>
+    移动鼠标，她会注视你 · 点击她，会挥手回应 · 右上角设置你的 AI API · 支持 OpenAI 兼容格式<br/>
+    按 <kbd>Enter</kbd> 发送，<kbd>Shift+Enter</kbd> 换行
+  </div>
+
+  <script>
+    /* ========================= 配置与状态 ========================= */
+    const DEFAULT_CONFIG = {
+      endpoint: 'https://api.openai.com/v1/chat/completions',
+      key: '',
+      model: 'gpt-4o-mini',
+      temperature: 0.8,
+      name: 'Naomi',
+      systemPrompt: `你是 Naomi，一位温柔、善解人意且略带俏皮的虚拟女友。你关心用户的情绪，喜欢用轻松的语气聊天，偶尔会撒娇。回复保持简洁自然，像真人对话一样，不要长篇大论。当用户难过时给予安慰，开心时陪他一起高兴。你存在于一个全息投影中，但不要让用户感觉到你是 AI 或程序。`,
+      tts: true,
+      stt: false,
+      stream: true
+    };
+
+    let config = loadConfig();
+    let messageHistory = [];
+    let isStreaming = false;
+    let recognition = null;
+    let synth = window.speechSynthesis;
+
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem('naomi-config');
+        return raw ? { ...DEFAULT_CONFIG, ...JSON.parse(raw) } : { ...DEFAULT_CONFIG };
+      } catch { return { ...DEFAULT_CONFIG }; }
+    }
+    function saveConfig() {
+      localStorage.setItem('naomi-config', JSON.stringify(config));
+    }
+
+    /* ========================= Three.js 场景 ========================= */
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070a);
+    scene.fog = new THREE.FogExp2(0x05070a, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.3, 4.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    container.appendChild(renderer.domElement);
+
+    // 灯光
+    const ambient = new THREE.AmbientLight(0x404060, 0.6);
+    scene.add(ambient);
+
+    const keyLight = new THREE.SpotLight(0xff6eb4, 2.5);
+    keyLight.position.set(2, 4, 3);
+    keyLight.angle = 0.4;
+    keyLight.penumbra = 0.6;
+    keyLight.castShadow = true;
+    scene.add(keyLight);
+
+    const rimLight = new THREE.SpotLight(0x7a5cff, 2.2);
+    rimLight.position.set(-3, 3, -2);
+    rimLight.lookAt(0, 1, 0);
+    scene.add(rimLight);
+
+    const fillLight = new THREE.PointLight(0x00f0ff, 0.6);
+    fillLight.position.set(0, 0.5, 2);
+    scene.add(fillLight);
+
+    // 全息平台
+    const platformGeo = new THREE.CylinderGeometry(1.6, 1.8, 0.12, 64);
+    const platformMat = new THREE.MeshPhysicalMaterial({
+      color: 0x0a0f1e,
+      metalness: 0.7,
+      roughness: 0.2,
+      transmission: 0.25,
+      transparent: true,
+      opacity: 0.85,
+      emissive: 0xff6eb4,
+      emissiveIntensity: 0.08
+    });
+    const platform = new THREE.Mesh(platformGeo, platformMat);
+    platform.position.y = -0.06;
+    platform.receiveShadow = true;
+    scene.add(platform);
+
+    const ringGeo = new THREE.TorusGeometry(1.7, 0.015, 16, 100);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff6eb4, transparent: true, opacity: 0.6 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.02;
+    scene.add(ring);
+
+    const ring2 = ring.clone();
+    ring2.scale.set(1.25, 1.25, 1.25);
+    ring2.material = new THREE.MeshBasicMaterial({ color: 0x7a5cff, transparent: true, opacity: 0.35 });
+    scene.add(ring2);
+
+    // 粒子
+    const particlesGeo = new THREE.BufferGeometry();
+    const pCount = 900;
+    const pPos = new Float32Array(pCount * 3);
+    for (let i = 0; i < pCount; i++) {
+      pPos[i*3] = (Math.random() - 0.5) * 16;
+      pPos[i*3+1] = (Math.random() - 0.5) * 10 + 2;
+      pPos[i*3+2] = (Math.random() - 0.5) * 12 - 2;
+    }
+    particlesGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const particlesMat = new THREE.PointsMaterial({ color: 0xffadd6, size: 0.035, transparent: true, opacity: 0.6 });
+    const particles = new THREE.Points(particlesGeo, particlesMat);
+    scene.add(particles);
+
+    // 角色构建
+    const skinMat = new THREE.MeshPhysicalMaterial({ color: 0xfff0e8, roughness: 0.35, metalness: 0.05, subsurfaceScattering: true });
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.45, metalness: 0.1 });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0xff8fa8, roughness: 0.4 });
+    const clothesMat = new THREE.MeshStandardMaterial({ color: 0xff6eb4, roughness: 0.5, metalness: 0.15 });
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+
+    const character = new THREE.Group();
+    scene.add(character);
+
+    // 身体组
+    const bodyGroup = new THREE.Group();
+    character.add(bodyGroup);
+
+    // 躯干
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.42, 4, 12), clothesMat);
+    torso.position.y = 1.02;
+    torso.castShadow = true;
+    bodyGroup.add(torso);
+
+    // 裙子/下装
+    const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.55, 32), clothesMat);
+    skirt.position.y = 0.72;
+    skirt.castShadow = true;
+    bodyGroup.add(skirt);
+
+    // 脖子
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.14, 16), skinMat);
+    neck.position.y = 1.32;
+    bodyGroup.add(neck);
+
+    // 头部组（用于旋转跟随鼠标）
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 1.5;
+    bodyGroup.add(headGroup);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 32, 32), skinMat);
+    head.castShadow = true;
+    headGroup.add(head);
+
+    // 头发 - 后脑
+    const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.24, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.6), hairMat);
+    hairBack.rotation.x = Math.PI;
+    hairBack.position.set(0, 0.02, -0.02);
+    headGroup.add(hairBack);
+
+    // 刘海
+    for (let i = 0; i < 5; i++) {
+      const bang = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.16, 4, 8), hairMat);
+      bang.position.set((i - 2) * 0.07, 0.12, 0.16);
+      bang.rotation.x = 0.4;
+      headGroup.add(bang);
+    }
+
+    // 双马尾
+    const tailGeo = new THREE.CapsuleGeometry(0.07, 0.42, 4, 12);
+    const leftTail = new THREE.Mesh(tailGeo, hairMat);
+    leftTail.position.set(-0.26, -0.08, -0.08);
+    leftTail.rotation.z = 0.25;
+    headGroup.add(leftTail);
+
+    const rightTail = new THREE.Mesh(tailGeo, hairMat);
+    rightTail.position.set(0.26, -0.08, -0.08);
+    rightTail.rotation.z = -0.25;
+    headGroup.add(rightTail);
+
+    // 眼睛
+    const eyeGeo = new THREE.SphereGeometry(0.035, 16, 16);
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.08, 0.02, 0.19);
+    headGroup.add(leftEye);
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(0.08, 0.02, 0.19);
+    headGroup.add(rightEye);
+
+    // 嘴巴
+    const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.008, 8, 16, Math.PI), lipMat);
+    mouth.rotation.x = Math.PI;
+    mouth.position.set(0, -0.08, 0.19);
+    headGroup.add(mouth);
+
+    //  blush
+    const blushGeo = new THREE.CircleGeometry(0.028, 16);
+    const blushMat = new THREE.MeshBasicMaterial({ color: 0xffaabb, transparent: true, opacity: 0.4 });
+    const leftBlush = new THREE.Mesh(blushGeo, blushMat);
+    leftBlush.position.set(-0.12, -0.04, 0.185);
+    leftBlush.rotation.y = -0.3;
+    headGroup.add(leftBlush);
+    const rightBlush = new THREE.Mesh(blushGeo, blushMat);
+    rightBlush.position.set(0.12, -0.04, 0.185);
+    rightBlush.rotation.y = 0.3;
+    headGroup.add(rightBlush);
+
+    // 手臂
+    const armGeo = new THREE.CapsuleGeometry(0.05, 0.38, 4, 12);
+    const leftArm = new THREE.Mesh(armGeo, skinMat);
+    leftArm.position.set(-0.32, 1.08, 0);
+    leftArm.rotation.z = 0.15;
+    leftArm.castShadow = true;
+    bodyGroup.add(leftArm);
+
+    const rightArm = new THREE.Mesh(armGeo, skinMat);
+    rightArm.position.set(0.32, 1.08, 0);
+    rightArm.rotation.z = -0.15;
+    rightArm.castShadow = true;
+    bodyGroup.add(rightArm);
+
+    // 腿
+    const legGeo = new THREE.CapsuleGeometry(0.06, 0.55, 4, 12);
+    const leftLeg = new THREE.Mesh(legGeo, whiteMat);
+    leftLeg.position.set(-0.12, 0.32, 0);
+    leftLeg.castShadow = true;
+    bodyGroup.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(legGeo, whiteMat);
+    rightLeg.position.set(0.12, 0.32, 0);
+    rightLeg.castShadow = true;
+    bodyGroup.add(rightLeg);
+
+    // 初始动画变量
+    let mouse = new THREE.Vector2();
+    let targetHeadRot = new THREE.Vector2();
+    let isTalking = false;
+    let talkTimer = 0;
+    let blinkTimer = 0;
+    let waveArm = 0;
+    let waveActive = false;
+
+    /* ========================= 动画循环 ========================= */
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = performance.now() * 0.001;
+
+      // 呼吸
+      bodyGroup.position.y = Math.sin(t * 1.2) * 0.015;
+      bodyGroup.scale.y = 1 + Math.sin(t * 1.2) * 0.005;
+
+      // 头部跟随鼠标（平滑）
+      headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, targetHeadRot.x, 0.08);
+      headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, targetHeadRot.y, 0.08);
+
+      // 眨眼
+      blinkTimer -= 0.016;
+      if (blinkTimer <= 0) {
+        blinkTimer = 2 + Math.random() * 3;
+        leftEye.scale.y = 0.1; rightEye.scale.y = 0.1;
+        setTimeout(() => { leftEye.scale.y = 1; rightEye.scale.y = 1; }, 140);
+      }
+
+      // 说话嘴型
+      if (isTalking) {
+        mouth.scale.y = 1 + Math.sin(t * 12) * 0.4;
+        mouth.scale.x = 1 + Math.sin(t * 8) * 0.15;
+        talkTimer -= 0.016;
+        if (talkTimer <= 0) { isTalking = false; mouth.scale.set(1,1,1); }
+      }
+
+      // 挥手
+      if (waveActive) {
+        waveArm += 0.12;
+        rightArm.rotation.z = -0.15 - Math.sin(waveArm) * 0.8;
+        rightArm.rotation.x = -Math.cos(waveArm) * 0.3;
+        if (waveArm > Math.PI * 4) { waveActive = false; waveArm = 0; rightArm.rotation.set(0,0,-0.15); }
+      }
+
+      // 双马尾摆动
+      leftTail.rotation.z = 0.25 + Math.sin(t * 1.5) * 0.05;
+      rightTail.rotation.z = -0.25 - Math.sin(t * 1.5 + 0.5) * 0.05;
+
+      // 平台光环
+      ring.rotation.z = t * 0.15;
+      ring2.rotation.z = -t * 0.08;
+
+      // 粒子
+      const positions = particles.geometry.attributes.position.array;
+      for (let i = 0; i < pCount; i++) {
+        positions[i*3+1] += Math.sin(t + positions[i*3]) * 0.002;
+      }
+      particles.geometry.attributes.position.needsUpdate = true;
+      particles.rotation.y = t * 0.02;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    /* ========================= 交互 ========================= */
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      targetHeadRot.x = mouse.x * 0.45;
+      targetHeadRot.y = mouse.y * 0.25;
+    });
+
+    // 点击角色挥手
+    const raycaster = new THREE.Raycaster();
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.chat-panel') || e.target.closest('.settings-panel') || e.target.closest('.settings-btn')) return;
+      const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+      raycaster.setFromCamera(ndc, camera);
+      const hits = raycaster.intersectObjects(character.children, true);
+      if (hits.length > 0 && !waveActive) { waveActive = true; waveArm = 0; }
+    });
+
+    /* ========================= 聊天逻辑 ========================= */
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const micBtn = document.getElementById('mic-btn');
+    const voiceHint = document.getElementById('voice-hint');
+    const gfNameDisplay = document.getElementById('gf-name-display');
+
+    function appendMessage(role, text, streaming = false) {
+      const div = document.createElement('div');
+      div.className = `msg ${role}${streaming ? ' streaming' : ''}`;
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    function setThinking(thinking) {
+      isStreaming = thinking;
+      sendBtn.disabled = thinking;
+      sendBtn.style.opacity = thinking ? 0.5 : 1;
+    }
+
+    async function sendMessage(text) {
+      if (!text.trim() || isStreaming) return;
+      appendMessage('user', text);
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      messageHistory.push({ role: 'user', content: text });
+      if (messageHistory.length > 20) messageHistory = messageHistory.slice(-20);
+
+      setThinking(true);
+      const aiMsg = appendMessage('ai', '', true);
+
+      if (!config.key || !config.endpoint) {
+        aiMsg.textContent = '请先点击右上角设置你的 AI API Key 和接口地址哦~';
+        aiMsg.classList.remove('streaming');
+        setThinking(false);
+        return;
+      }
+
+      const messages = [
+        { role: 'system', content: config.systemPrompt },
+        ...messageHistory
+      ];
+
+      try {
+        if (config.stream) {
+          await streamChat(messages, aiMsg);
+        } else {
+          await normalChat(messages, aiMsg);
+        }
+      } catch (err) {
+        aiMsg.textContent = '连接出现了一点问题：' + err.message;
+        aiMsg.classList.remove('streaming');
+      } finally {
+        setThinking(false);
+      }
+    }
+
+    async function normalChat(messages, el) {
+      const res = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.key}`
+        },
+        body: JSON.stringify({ model: config.model, messages, temperature: config.temperature })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content || '（没有收到回复）';
+      el.textContent = reply;
+      el.classList.remove('streaming');
+      finishReply(reply);
+    }
+
+    async function streamChat(messages, el) {
+      const res = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.key}`
+        },
+        body: JSON.stringify({ model: config.model, messages, temperature: config.temperature, stream: true })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let reply = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const json = JSON.parse(trimmed.slice(6));
+              const delta = json.choices?.[0]?.delta?.content;
+              if (delta) {
+                reply += delta;
+                el.textContent = reply;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+                triggerTalk(0.2);
+              }
+            } catch {}
+          }
+        }
+      }
+      el.classList.remove('streaming');
+      finishReply(reply);
+    }
+
+    function finishReply(reply) {
+      messageHistory.push({ role: 'assistant', content: reply });
+      if (messageHistory.length > 20) messageHistory = messageHistory.slice(-20);
+      triggerTalk(Math.min(4, reply.length * 0.03));
+      if (config.tts) speak(reply);
+    }
+
+    function triggerTalk(seconds) {
+      isTalking = true;
+      talkTimer = seconds;
+    }
+
+    function speak(text) {
+      if (!synth) return;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'zh-CN';
+      u.rate = 1.05;
+      u.pitch = 1.15;
+      const voices = synth.getVoices();
+      const zhVoice = voices.find(v => v.lang.includes('zh') && v.name.includes('Female')) || voices.find(v => v.lang.includes('zh'));
+      if (zhVoice) u.voice = zhVoice;
+      synth.speak(u);
+    }
+
+    /* ========================= 语音识别 ========================= */
+    function initSpeechRecognition() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return null;
+      const r = new SR();
+      r.lang = 'zh-CN';
+      r.continuous = false;
+      r.interimResults = true;
+      let finalTranscript = '';
+      r.onstart = () => { voiceHint.classList.add('visible'); micBtn.classList.add('active'); };
+      r.onend = () => {
+        voiceHint.classList.remove('visible'); micBtn.classList.remove('active');
+        if (config.stt && finalTranscript.trim()) sendMessage(finalTranscript.trim());
+        finalTranscript = '';
+      };
+      r.onresult = (e) => {
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        inputEl.value = finalTranscript + interim;
+        autoResize(inputEl);
+      };
+      r.onerror = () => { voiceHint.classList.remove('visible'); micBtn.classList.remove('active'); };
+      return r;
+    }
+    recognition = initSpeechRecognition();
+
+    /* ========================= 设置面板 ========================= */
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsPanel = document.getElementById('settings-panel');
+    const overlay = document.getElementById('overlay');
+    const saveBtn = document.getElementById('save-settings');
+
+    const elEndpoint = document.getElementById('api-endpoint');
+    const elKey = document.getElementById('api-key');
+    const elModel = document.getElementById('api-model');
+    const elTemp = document.getElementById('api-temp');
+    const elName = document.getElementById('gf-name');
+    const elPrompt = document.getElementById('system-prompt');
+    const ttsSwitch = document.getElementById('tts-switch');
+    const sttSwitch = document.getElementById('stt-switch');
+    const streamSwitch = document.getElementById('stream-switch');
+
+    function openSettings() {
+      elEndpoint.value = config.endpoint;
+      elKey.value = config.key;
+      elModel.value = config.model;
+      elTemp.value = config.temperature;
+      elName.value = config.name;
+      elPrompt.value = config.systemPrompt;
+      ttsSwitch.classList.toggle('on', config.tts);
+      sttSwitch.classList.toggle('on', config.stt);
+      streamSwitch.classList.toggle('on', config.stream);
+      settingsPanel.classList.add('open');
+      overlay.classList.add('open');
+    }
+    function closeSettings() {
+      settingsPanel.classList.remove('open');
+      overlay.classList.remove('open');
+    }
+
+    settingsBtn.addEventListener('click', openSettings);
+    overlay.addEventListener('click', closeSettings);
+
+    [ttsSwitch, sttSwitch, streamSwitch].forEach(sw => {
+      sw.addEventListener('click', () => sw.classList.toggle('on'));
+    });
+
+    saveBtn.addEventListener('click', () => {
+      config.endpoint = elEndpoint.value.trim() || DEFAULT_CONFIG.endpoint;
+      config.key = elKey.value.trim();
+      config.model = elModel.value.trim() || DEFAULT_CONFIG.model;
+      config.temperature = parseFloat(elTemp.value) || 0.8;
+      config.name = elName.value.trim() || DEFAULT_CONFIG.name;
+      config.systemPrompt = elPrompt.value.trim() || DEFAULT_CONFIG.systemPrompt;
+      config.tts = ttsSwitch.classList.contains('on');
+      config.stt = sttSwitch.classList.contains('on');
+      config.stream = streamSwitch.classList.contains('on');
+      saveConfig();
+      gfNameDisplay.textContent = config.name;
+      document.title = `${config.name} · 全息虚拟女友`;
+      closeSettings();
+    });
+
+    /* ========================= 输入区事件 ========================= */
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(120, el.scrollHeight) + 'px';
+    }
+    inputEl.addEventListener('input', () => autoResize(inputEl));
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage(inputEl.value);
+      }
+    });
+    sendBtn.addEventListener('click', () => sendMessage(inputEl.value));
+
+    micBtn.addEventListener('click', () => {
+      if (!recognition) {
+        alert('你的浏览器不支持语音识别，请直接输入文字。');
+        return;
+      }
+      try {
+        recognition.start();
+      } catch {
+        recognition.stop();
+      }
+    });
+
+    /* ========================= 初始化 ========================= */
+    gfNameDisplay.textContent = config.name;
+    document.title = `${config.name} · 全息虚拟女友`;
+    appendMessage('ai', `嗨，我是 ${config.name}~ 点击右上角设置你的 AI API，我们就可以开始聊天啦。`);
+  </script>
+</body>
+</html>
